@@ -33,6 +33,8 @@ define([], function () {
     DialogCloseButtonLabel: "Cancel",
     DialogConfirmDeleteLabel: "Delete",
     SaveButtonLabel: "Save",
+    ApproveButtonLabel: "Approve",
+    RejectButtonLabel: "Reject",
     DeleteButtonLabel: "Delete",
     CancelButtonLabel: "Cancel",
     LoadingEventsLabel: "Loading events...",

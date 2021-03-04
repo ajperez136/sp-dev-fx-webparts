@@ -3,4 +3,5 @@ export interface IUserPermissions {
   hasPermissionEdit: boolean;
   hasPermissionDelete: boolean;
   hasPermissionView: boolean;
+  hasPermissionApprove: boolean;
 }

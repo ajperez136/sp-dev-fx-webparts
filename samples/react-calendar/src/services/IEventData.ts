@@ -22,4 +22,5 @@ export interface IEventData {
   UID?:string;
   RecurrenceID?: string;
   MasterSeriesItemID?: string;
+  ModerationStatus?:string;
 }

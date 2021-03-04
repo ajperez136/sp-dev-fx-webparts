@@ -15,6 +15,7 @@ import {
 } from 'office-ui-fabric-react';
 import { IEventData } from '../../services/IEventData';
 import { IUserPermissions } from '../../services/IUserPermissions';
+import { IModerationStatus } from '../../services/IModerationStatus';
 import {
   DatePicker,
   IDatePickerStrings,
@@ -65,8 +66,8 @@ const DayPickerStrings: IDatePickerStrings = {
 export class Event extends React.Component<IEventProps, IEventState> {
   private spService: spservices = null;
   private attendees: IPersonaProps[] = [];
-  private latitude: number = 41.1931819;
-  private longitude: number = -8.4897452;
+  private latitude: number = 0;
+  private longitude: number = 0;
   private returnedRecurrenceInfo: { recurrenceData: string, eventDate: Date, endDate: Date } = undefined;
 
   private categoryDropdownOption: IDropdownOption[] = [];
@@ -77,8 +78,8 @@ export class Event extends React.Component<IEventProps, IEventState> {
     /* geolocation is available */
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition((position) => {
-        this.latitude = position.coords.latitude;
-        this.longitude = position.coords.longitude;
+        this.latitude = 0;//position.coords.latitude;
+        this.longitude = 0;//position.coords.longitude;
 
       });
     } else {
@@ -109,7 +110,7 @@ export class Event extends React.Component<IEventProps, IEventState> {
       showRecurrenceSeriesInfo:false,
       newRecurrenceEvent:false,
       recurrenceAction: 'display',
-      userPermissions: { hasPermissionAdd: false, hasPermissionDelete: false, hasPermissionEdit: false, hasPermissionView: false },
+      userPermissions: { hasPermissionAdd: false, hasPermissionDelete: false, hasPermissionEdit: false, hasPermissionView: false, hasPermissionApprove: false },
     };
     // local copia of props
     this.onStartChangeHour = this.onStartChangeHour.bind(this);
@@ -119,6 +120,8 @@ export class Event extends React.Component<IEventProps, IEventState> {
     this.onEditorStateChange = this.onEditorStateChange.bind(this);
     this.onRenderFooterContent = this.onRenderFooterContent.bind(this);
     this.onSave = this.onSave.bind(this);
+    this.onApprove = this.onApprove.bind(this);
+    this.onReject = this.onReject.bind(this);
     this.onSelectDateEnd = this.onSelectDateEnd.bind(this);
     this.onSelectDateStart = this.onSelectDateStart.bind(this);
     this.onUpdateCoordinates = this.onUpdateCoordinates.bind(this);
@@ -142,6 +145,41 @@ export class Event extends React.Component<IEventProps, IEventState> {
   private hidePanel() {
     this.props.onDissmissPanel(false);
   }
+
+
+  private async onApprove() {
+    let eventData: IEventData = this.state.eventData;    
+
+    try {
+      this.setState({ isSaving: true });
+
+      await this.spService.changeModerationStatus(eventData, this.props.siteUrl, this.props.listId, IModerationStatus.Approved);
+      
+      this.setState({ isSaving: false });
+      this.props.onDissmissPanel(true);
+    }
+    catch (error) {
+      this.setState({ hasError: true, errorMessage: error.message, isSaving: false });
+    }
+
+  }
+
+  private async onReject(){  
+    let eventData: IEventData = this.state.eventData;    
+
+    try {
+      this.setState({ isSaving: true });
+
+      await this.spService.changeModerationStatus(eventData, this.props.siteUrl, this.props.listId, IModerationStatus.Denied);
+      
+      this.setState({ isSaving: false });
+      this.props.onDissmissPanel(true);
+    }
+    catch (error) {
+      this.setState({ hasError: true, errorMessage: error.message, isSaving: false });
+    }
+  }
+
   /**
    *  Save Event to a list
    * @private
@@ -200,7 +238,7 @@ export class Event extends React.Component<IEventProps, IEventState> {
     // get Geolocation
 
     eventData.geolocation = { Latitude: this.latitude, Longitude: this.longitude };
-    const locationInfo = await this.spService.getGeoLactionName(this.latitude, this.longitude);
+    const locationInfo = null;//await this.spService.getGeoLactionName(this.latitude, this.longitude);
     eventData.location = locationInfo ? locationInfo.display_name : 'N/A';
 
     // get Attendees
@@ -297,11 +335,11 @@ export class Event extends React.Component<IEventProps, IEventState> {
         }
       }
       // Has geolocation ?
-      this.latitude = event.geolocation && event.geolocation.Latitude ? event.geolocation.Latitude : this.latitude;
-      this.longitude = event.geolocation && event.geolocation.Longitude ? event.geolocation.Longitude : this.longitude;
+      this.latitude = 0;//event.geolocation && event.geolocation.Latitude ? event.geolocation.Latitude : this.latitude;
+      this.longitude = 0;//event.geolocation && event.geolocation.Longitude ? event.geolocation.Longitude : this.longitude;
 
-      event.geolocation.Latitude = this.latitude;
-      event.geolocation.Longitude = this.longitude;
+      //event.geolocation.Latitude = this.latitude;
+      //event.geolocation.Longitude = this.longitude;
 
       const recurrenceInfo = event.EventType === "4" && event.MasterSeriesItemID !== "" ? event.RecurrenceData : await this.returnExceptionRecurrenceInfo(event.RecurrenceData);
       // Update Component Data
@@ -488,7 +526,7 @@ export class Event extends React.Component<IEventProps, IEventState> {
    * @returns
    * @memberof Event
    */
-  private onRenderFooterContent() {
+  private onRenderFooterContent() {    
     return (
       <div >
         <DefaultButton onClick={this.hidePanel} style={{ marginBottom: '15px', float: 'right' }}>
@@ -511,6 +549,26 @@ export class Event extends React.Component<IEventProps, IEventState> {
             onClick={this.onSave}
             style={{ marginBottom: '15px', marginRight: '8px', float: 'right' }}>
             {strings.SaveButtonLabel}
+          </PrimaryButton>
+
+        }
+        {
+          (this.props.panelMode == IPanelModelEnum.edit && this.state.eventData.ModerationStatus == "Pending" && this.state.userPermissions.hasPermissionApprove) &&
+          <PrimaryButton
+            disabled={this.state.disableButton}
+            onClick={this.onApprove}
+            style={{ marginBottom: '15px', marginRight: '8px', float: 'right' }}>
+            {strings.ApproveButtonLabel}
+          </PrimaryButton>
+
+        }
+        {
+          (this.props.panelMode == IPanelModelEnum.edit && this.state.eventData.ModerationStatus == "Pending" && this.state.userPermissions.hasPermissionApprove) &&
+          <PrimaryButton
+            disabled={this.state.disableButton}
+            onClick={this.onReject}
+            style={{ marginBottom: '15px', marginRight: '8px', float: 'right' }}>
+            {strings.RejectButtonLabel}
           </PrimaryButton>
 
         }
@@ -552,7 +610,7 @@ export class Event extends React.Component<IEventProps, IEventState> {
   private async onUpdateCoordinates(coordinates: ICoordinates) {
     this.latitude = coordinates.latitude;
     this.longitude = coordinates.longitude;
-    const locationInfo = await this.spService.getGeoLactionName(this.latitude, this.longitude);
+    const locationInfo = null;//(this.latitude, this.longitude);
     this.setState({ eventData: { ...this.state.eventData, location: locationInfo.display_name } });
   }
 
@@ -1081,37 +1139,37 @@ export class Event extends React.Component<IEventProps, IEventState> {
                 <br />
                 {
 
-                  this.state.eventData && (this.state.eventData.EventType == "0") ?
-                    <div style={{ display: 'inline-block', verticalAlign: 'top', width: '200px' }}>
-                      <Toggle
-                        defaultChecked={false}
-                        inlineLabel={true}
-                        label={ strings.ifRecurrenceLabel }
-                        onText={ strings.onLabel }
-                        offText={ strings.offLabel }
-                        onChange={(ev, checked: boolean) => {
-                          ev.preventDefault();
-                          this.setState({ showRecurrenceSeriesInfo: checked, newRecurrenceEvent: checked });
-                        }}
-                      />
-                    </div>
-                    :
+                //  this.state.eventData && (this.state.eventData.EventType == "0") ?
+                //    <div style={{ display: 'inline-block', verticalAlign: 'top', width: '200px' }}>
+                //      <Toggle
+                //        defaultChecked={false}
+                //        inlineLabel={true}
+                //        label={ strings.ifRecurrenceLabel }
+                //        onText={ strings.onLabel }
+                //        offText={ strings.offLabel }
+                //        onChange={(ev, checked: boolean) => {
+                //          ev.preventDefault();
+                //          this.setState({ showRecurrenceSeriesInfo: checked, newRecurrenceEvent: checked });
+                //        }}
+                //      />
+                //    </div>
+                //    :
                     ''
                 }
 
                 {
-                  this.state.showRecurrenceSeriesInfo && (
-                    <EventRecurrenceInfo
-                      context={this.props.context}
-                      display={true}
-                      recurrenceData={this.state.eventData.RecurrenceData}
-                      startDate={this.state.startDate}
-                      siteUrl={this.props.siteUrl}
-                      returnRecurrenceData={this.returnRecurrenceInfo}
-                    >
+                //  this.state.showRecurrenceSeriesInfo && (
+                //    <EventRecurrenceInfo
+                //      context={this.props.context}
+                //      display={true}
+                //      recurrenceData={this.state.eventData.RecurrenceData}
+                //      startDate={this.state.startDate}
+                //      siteUrl={this.props.siteUrl}
+                //      returnRecurrenceData={this.returnRecurrenceInfo}
+                //    >
 
-                    </EventRecurrenceInfo>
-                  )
+                //    </EventRecurrenceInfo>
+                //  )
                 }
 
                 < Label > {strings.eventDescriptionLabel }</Label>
@@ -1138,6 +1196,7 @@ export class Event extends React.Component<IEventProps, IEventState> {
                     disabled={this.state.userPermissions.hasPermissionAdd || this.state.userPermissions.hasPermissionEdit ? false : true}
                   />
                 </div>
+                {/*
                 <div>
                   <TextField
                     value={this.state.eventData && this.state.eventData.location ? this.state.eventData.location : ''}
@@ -1145,13 +1204,14 @@ export class Event extends React.Component<IEventProps, IEventState> {
                     readOnly
                     multiline />
                 </div>
-                <div>
-                  <Map titleText={strings.LocationLabel}
+                <div>                
+                <Map titleText={strings.LocationLabel}
                     coordinates={{ latitude: this.state.locationLatitude, longitude: this.state.locationLongitude }}
                     enableSearch={this.state.userPermissions.hasPermissionAdd || this.state.userPermissions.hasPermissionEdit ? true : false}
                     onUpdateCoordinates={this.onUpdateCoordinates}
-                  />
+                  />                
                 </div>
+                */}
               </div>
             }
           </div>

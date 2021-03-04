@@ -35,6 +35,8 @@ define([], function() {
     SaveButtonLabel: " Save",
     DeleteButtonLabel: "Delete",
     CancelButtonLabel: "Cancel",
+    ApproveButtonLabel: "Approve",
+    RejectButtonLabel: "Reject",
     LoadingEventsLabel: "A carregar eventos...",
     WebPartConfigButtonLabel: "Configurar",
     WebpartConfigDescription: "Por favor configure configurar calendário ",

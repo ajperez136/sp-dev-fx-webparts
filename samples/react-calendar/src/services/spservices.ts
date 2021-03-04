@@ -10,6 +10,7 @@ import * as moment from 'moment';
 import { SiteUser } from "@pnp/sp/src/siteusers";
 import { IUserPermissions } from './IUserPermissions';
 import parseRecurrentEvent from './parseRecurrentEvent';
+import { IModerationStatus } from './IModerationStatus';
 
 // Class Services
 export default class spservices {
@@ -82,13 +83,13 @@ export default class spservices {
       results = await web.lists.getById(listId).items.add({
         Title: newEvent.title,
         Description: newEvent.Description,
-        Geolocation: newEvent.geolocation,
+        Geolocation: null,//newEvent.geolocation,
         ParticipantsPickerId: { results: newEvent.attendes },
         EventDate: new Date(moment(newEvent.EventDate).add(siteTimeZoneHours, 'hours').toISOString()),
         EndDate: new Date(moment(newEvent.EndDate).add(siteTimeZoneHours, 'hours').toISOString()),
         Location: newEvent.location,
         fAllDayEvent: false,
-        fRecurrence: newEvent.fRecurrence,
+        fRecurrence: false,//newEvent.fRecurrence,
         Category: newEvent.Category,
         EventType: newEvent.EventType,
         UID: newEvent.UID,
@@ -119,7 +120,7 @@ export default class spservices {
       const web = new Web(siteUrl);
       //"Title","fRecurrence", "fAllDayEvent","EventDate", "EndDate", "Description","ID", "Location","Geolocation","ParticipantsPickerId"
       const event = await web.lists.getById(listId).items.usingCaching().getById(eventId)
-        .select("RecurrenceID", "MasterSeriesItemID", "Id", "ID", "ParticipantsPickerId", "EventType", "Title", "Description", "EventDate", "EndDate", "Location", "Author/SipAddress", "Author/Title", "Geolocation", "fAllDayEvent", "fRecurrence", "RecurrenceData", "RecurrenceData", "Duration", "Category", "UID")
+        .select("RecurrenceID", "MasterSeriesItemID", "Id", "ID", "ParticipantsPickerId", "EventType", "Title", "Description", "EventDate", "EndDate", "Location", "Author/SipAddress", "Author/Title", "Geolocation", "fAllDayEvent", "fRecurrence", "RecurrenceData", "RecurrenceData", "Duration", "Category", "UID", "_ModerationStatus")
         .expand("Author")
         .get();
 
@@ -140,7 +141,7 @@ export default class spservices {
         ownerName: event.Author.Title,
         attendes: event.ParticipantsPickerId,
         fAllDayEvent: false,
-        geolocation: { Longitude: event.Geolocation ? event.Geolocation.Longitude : 0, Latitude: event.Geolocation ? event.Geolocation.Latitude : 0 },
+        geolocation: null, //{ Longitude: event.Geolocation ? event.Geolocation.Longitude : 0, Latitude: event.Geolocation ? event.Geolocation.Latitude : 0 },
         Category: event.Category,
         Duration: event.Duration,
         UID: event.UID,
@@ -148,6 +149,7 @@ export default class spservices {
         fRecurrence: event.fRecurrence,
         RecurrenceID: event.RecurrenceID,
         MasterSeriesItemID: event.MasterSeriesItemID,
+        ModerationStatus: event._ModerationStatus,
       };
     } catch (error) {
       return Promise.reject(error);
@@ -178,12 +180,12 @@ export default class spservices {
       let newItem: any = {
         Title: updateEvent.title,
         Description: updateEvent.Description,
-        Geolocation: updateEvent.geolocation,
+        Geolocation: null,//updateEvent.geolocation,
         ParticipantsPickerId: { results: updateEvent.attendes },
         EventDate: new Date(moment(updateEvent.EventDate).add(siteTimeZoneHours, 'hours').toISOString()),
         EndDate: new Date(moment(updateEvent.EndDate).add(siteTimeZoneHours, 'hours').toISOString()),
         Location: updateEvent.location,
-        fAllDayEvent: false,
+        fAllDayEvent: false,        
         fRecurrence: updateEvent.fRecurrence,
         Category: updateEvent.Category,
         RecurrenceData: updateEvent.RecurrenceData ? await this.deCodeHtmlEntities(updateEvent.RecurrenceData) : "",
@@ -201,6 +203,24 @@ export default class spservices {
       return Promise.reject(error);
     }
     return results;
+  }
+
+  public async changeModerationStatus(event: IEventData, siteUrl:string, listId: string, status: IModerationStatus){
+    try {
+      const web = new Web(siteUrl);            
+      
+      let newItem: any = {        
+        OData__ModerationStatus: status
+      }
+
+      const list = web.lists.getById(listId);       
+      await list.items.getById(event.Id).update(newItem);        
+    }
+    catch (error) {
+      return Promise.reject(error);
+    }
+
+    return;
   }
 
   public async deleteRecurrenceExceptions(event: IEventData, siteUrl: string, listId: string) {
@@ -346,6 +366,7 @@ export default class spservices {
     let hasPermissionEdit: boolean = false;
     let hasPermissionDelete: boolean = false;
     let hasPermissionView: boolean = false;
+    let hasPermissionApprove: boolean = false;
     let userPermissions: IUserPermissions = undefined;
     try {
       const web = new Web(siteUrl);
@@ -355,13 +376,14 @@ export default class spservices {
       hasPermissionDelete = sp.web.lists.getById(listId).hasPermissions(userEffectivePermissions, PermissionKind.DeleteListItems);
       hasPermissionEdit = sp.web.lists.getById(listId).hasPermissions(userEffectivePermissions, PermissionKind.EditListItems);
       hasPermissionView = sp.web.lists.getById(listId).hasPermissions(userEffectivePermissions, PermissionKind.ViewListItems);
-      userPermissions = { hasPermissionAdd: hasPermissionAdd, hasPermissionEdit: hasPermissionEdit, hasPermissionDelete: hasPermissionDelete, hasPermissionView: hasPermissionView };
+      hasPermissionApprove = sp.web.lists.getById(listId).hasPermissions(userEffectivePermissions, PermissionKind.ApproveItems);
+      userPermissions = { hasPermissionAdd: hasPermissionAdd, hasPermissionEdit: hasPermissionEdit, hasPermissionDelete: hasPermissionDelete, hasPermissionView: hasPermissionView, hasPermissionApprove: hasPermissionApprove };
 
     } catch (error) {
       return Promise.reject(error);
     }
     return userPermissions;
-  }
+  }  
   /**
    *
    * @param {string} siteUrl
@@ -467,7 +489,7 @@ export default class spservices {
       const results = await web.lists.getById(listId).usingCaching().renderListDataAsStream(
         {
           DatesInUtc: true,
-          ViewXml: `<View><ViewFields><FieldRef Name='RecurrenceData'/><FieldRef Name='Duration'/><FieldRef Name='Author'/><FieldRef Name='Category'/><FieldRef Name='Description'/><FieldRef Name='ParticipantsPicker'/><FieldRef Name='Geolocation'/><FieldRef Name='ID'/><FieldRef Name='EndDate'/><FieldRef Name='EventDate'/><FieldRef Name='ID'/><FieldRef Name='Location'/><FieldRef Name='Title'/><FieldRef Name='fAllDayEvent'/><FieldRef Name='EventType'/><FieldRef Name='UID' /><FieldRef Name='fRecurrence' /></ViewFields>
+          ViewXml: `<View><ViewFields><FieldRef Name='RecurrenceData'/><FieldRef Name='Duration'/><FieldRef Name='Author'/><FieldRef Name='Category'/><FieldRef Name='Description'/><FieldRef Name='ParticipantsPicker'/><FieldRef Name='Geolocation'/><FieldRef Name='ID'/><FieldRef Name='EndDate'/><FieldRef Name='EventDate'/><FieldRef Name='ID'/><FieldRef Name='Location'/><FieldRef Name='Title'/><FieldRef Name='fAllDayEvent'/><FieldRef Name='EventType'/><FieldRef Name='UID' /><FieldRef Name='fRecurrence' /><FieldRef Name='_ModerationStatus' /></ViewFields>
           <Query>
           <Where>
             <And>
@@ -494,10 +516,10 @@ export default class spservices {
           const initials: string = initialsArray[0].charAt(0) + initialsArray[initialsArray.length - 1].charAt(0);
           const userPictureUrl = await this.getUserProfilePictureUrl(`i:0#.f|membership|${event.Author[0].email}`);
           const attendees: number[] = [];
-          const first: number = event.Geolocation.indexOf('(') + 1;
-          const last: number = event.Geolocation.indexOf(')');
-          const geo = event.Geolocation.substring(first, last);
-          const geolocation = geo.split(' ');
+          const first: number = null;//event.Geolocation.indexOf('(') + 1;
+          const last: number = null;//event.Geolocation.indexOf(')');
+          const geo = null; //event.Geolocation.substring(first, last);
+          const geolocation = null; //geo.split(' ');
           const CategoryColorValue: any[] = categoryColor.filter((value) => {
             return value.category == event.Category;
           });
@@ -526,14 +548,15 @@ export default class spservices {
             ownerName: event.Author[0].title,
             attendes: attendees,
             fAllDayEvent: false,
-            geolocation: { Longitude: parseFloat(geolocation[0]), Latitude: parseFloat(geolocation[1]) },
+            geolocation: null,//{ Longitude: parseFloat(geolocation[0]), Latitude: parseFloat(geolocation[1]) },
             Category: event.Category,
             Duration: event.Duration,
             RecurrenceData: event.RecurrenceData ? await this.deCodeHtmlEntities(event.RecurrenceData) : "",
             fRecurrence: event.fRecurrence,
             RecurrenceID: event.RecurrenceID ? moment(event.RecurrenceID).subtract(siteTimeZoneHours, 'hour').toISOString() : undefined,
             MasterSeriesItemID: event.MasterSeriesItemID,
-            UID: event.UID.replace("{", "").replace("}", ""),
+            UID: event.UID.replace("{", "").replace("}", "",), 
+            ModerationStatus: event._ModerationStatus,
           });
         }
 

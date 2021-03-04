@@ -35,6 +35,8 @@ define([], function () {
       SaveButtonLabel: "Spara",
       DeleteButtonLabel: "Ta bort",
       CancelButtonLabel: "Avbryt",
+      ApproveButtonLabel: "Approve",
+      RejectButtonLabel: "Reject",
       LoadingEventsLabel: "Laddar händelser...",
       WebPartConfigButtonLabel: "Inställningar",
       WebpartConfigDescription: "Ställ in kalender lista ",
